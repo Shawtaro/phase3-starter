@@ -315,6 +315,20 @@ PageTableAllocateIdentity(int pages)
 {
     USLOSS_PTE  *table = NULL;
     // allocate and initialize table here
+    if(!initialized)
+        return NULL; //Returns NULL if P3_VmInit has not been called
+    else{
+        table = malloc(sizeof(USLOSS_PTE)*pages);
+        for(int i = 0;i<pages;i++){
+            table[i].frame=i; // identity, page X maps frame X
+            table[i].read=l;
+            table[i].write=l;
+            table[i].incore=l;
+        }
+        numPages = pages;
+        pageTables[P1_GetPid()]=table;
+    }
+    
     return table;
 }
 
@@ -323,6 +337,10 @@ PageTableFree(PID pid)
 {
     int result = P1_SUCCESS;
     // free table here
+    if(initialized){//Does nothing if P3_VmInit has not been called.
+        free(pageTables[P1_GetPid()]);
+        pageTables[P1_GetPid()]=NULL;
+    }
     return result;
 }
 
