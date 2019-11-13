@@ -351,7 +351,7 @@ int P3_Startup(void *arg)
     int status;
     int rc;
 
-    rc = Sys_Spawn("P4_Startup", P4_Startup, NULL,  3 * USLOSS_MIN_STACK, 3, &pid4);
+    rc = Sys_Spawn("P4_Startup", P4_Startup, NULL,  4 * USLOSS_MIN_STACK, 3, &pid4);
     assert(rc == 0);
     assert(pid4 >= 0);
     rc = Sys_Wait(&pid, &status);
