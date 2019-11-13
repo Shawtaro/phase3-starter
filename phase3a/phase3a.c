@@ -326,6 +326,9 @@ PageTableAllocateIdentity(int pages)
             table[i].incore=l;
         }
         numPages = pages;
+        numFrames = pages;
+        P3_vmStats.pages = pages;
+        P3_vmStats.frames = frames;
         pageTables[P1_GetPid()]=table;
     }
     
