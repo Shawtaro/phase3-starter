@@ -315,23 +315,13 @@ PageTableAllocateIdentity(int pages)
 {
     USLOSS_PTE  *table = NULL;
     // allocate and initialize table here
-    if(!initialized)
-        return NULL; //Returns NULL if P3_VmInit has not been called
-    else{
-        table = malloc(sizeof(USLOSS_PTE)*pages);
-        for(int i = 0;i<pages;i++){
-            table[i].frame=i; // identity, page X maps frame X
-            table[i].read=l;
-            table[i].write=l;
-            table[i].incore=l;
-        }
-        numPages = pages;
-        numFrames = pages;
-        P3_vmStats.pages = pages;
-        P3_vmStats.frames = frames;
-        pageTables[P1_GetPid()]=table;
+    table=malloc(sizeof(USLOSS_PTE)*pages);
+    for(int i=0;i<pages;i++){
+        (table+i)->incore=1;
+        (table+i)->read=1;
+        (table+i)->write=1;
+        (table+i)->frame=i;
     }
-    
     return table;
 }
 
@@ -340,9 +330,14 @@ PageTableFree(PID pid)
 {
     int result = P1_SUCCESS;
     // free table here
-    if(initialized){//Does nothing if P3_VmInit has not been called.
-        free(pageTables[P1_GetPid()]);
-        pageTables[P1_GetPid()]=NULL;
+    if (initialized){
+        USLOSS_PTE  *table = NULL;
+        result = P3PageTableGet(pid,&table);
+        if(result==P1_SUCCESS){
+            free(table);
+            table=NULL;
+            result = P3PageTableSet(pid,table);
+        }
     }
     return result;
 }
@@ -354,7 +349,7 @@ int P3_Startup(void *arg)
     int status;
     int rc;
 
-    rc = Sys_Spawn("P4_Startup", P4_Startup, NULL,  4 * USLOSS_MIN_STACK, 3, &pid4);
+    rc = Sys_Spawn("P4_Startup", P4_Startup, NULL,  3 * USLOSS_MIN_STACK, 3, &pid4);
     assert(rc == 0);
     assert(pid4 >= 0);
     rc = Sys_Wait(&pid, &status);
