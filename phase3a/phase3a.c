@@ -315,12 +315,14 @@ PageTableAllocateIdentity(int pages)
 {
     USLOSS_PTE  *table = NULL;
     // allocate and initialize table here
-    table=malloc(sizeof(USLOSS_PTE)*pages);
-    for(int i=0;i<pages;i++){
-        (table+i)->incore=1;
-        (table+i)->read=1;
-        (table+i)->write=1;
-        (table+i)->frame=i;
+    if(initialized){
+        table=malloc(sizeof(USLOSS_PTE)*pages);
+        for(int i=0;i<pages;i++){
+            (table+i)->incore=1;
+            (table+i)->read=1;
+            (table+i)->write=1;
+            (table+i)->frame=i;
+        }
     }
     return table;
 }
