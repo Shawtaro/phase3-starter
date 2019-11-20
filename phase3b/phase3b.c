@@ -30,6 +30,26 @@ P3PageFaultHandler(int type, void *arg)
         print error message
         USLOSS_Halt(1)
     *********************/
+    if(USLOSS_MmuGetCause()==USLOSS_MMU_FAULT){
+        int pid = P1_GetPid();
+        USLOSS_PTE *table;
+        int rc = P3PageTableGet(pid,&table);
+        if(rc!=P1_SUCCESS||table==NULL){
+            USLOSS_Console("PAGE FAULT!!! PID %d offset 0x%x\n", P1_GetPid(), (int) arg);
+            USLOSS_Halt(1);
+        }else{
+        	// determine which page suffered the fault, not sure about this step
+            int page = ((int) arg)/USLOSS_MmuPageSize();
+            (table+page)->incore=1;
+            (table+page)->read=1;
+            (table+page)->write=1;
+            (table+page)->frame=page;
+            rc = USLOSS_MmuSetPageTable(table);
+        }
+    }else{
+        USLOSS_Console("PAGE FAULT!!! PID %d offset 0x%x\n", P1_GetPid(), (int) arg);
+        USLOSS_Halt(1);
+    }
 
 }
 
@@ -37,6 +57,9 @@ USLOSS_PTE *
 P3PageTableAllocateEmpty(int pages)
 {
     USLOSS_PTE  *table = NULL;
-    // allocate and initialize an empty page table
+    table=malloc(sizeof(USLOSS_PTE)*pages);
+    for(int i=0;i<pages;i++){
+        (table+i)->incore=0;
+    }
     return table;
 }
