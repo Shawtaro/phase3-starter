@@ -52,15 +52,19 @@ LIBS = -lusloss$(USLOSS_VERSION) \
 	   -lphase2c-$(PHASE2C_VERSION) \
 	   -lphase2d-$(PHASE2D_VERSION)
 
+STUBS = ./p3/p3stubs.o
+
 ifeq ($(PHASE), phase3b)
 	LIBS += -lphase3a-$(PHASE3A_VERSION)
 else ifeq ($(PHASE), phase3c)
 	LIBS += -lphase3a-$(PHASE3A_VERSION)
 	LIBS += -lphase3b-$(PHASE3B_VERSION)
+	STUBS =
 else ifeq ($(PHASE), phase3d)
 	LIBS += -lphase3a-$(PHASE3A_VERSION)
 	LIBS += -lphase3b-$(PHASE3B_VERSION)
 	LIBS += -lphase3c-$(PHASE3C_VERSION)
+	STUBS =
 endif
 
 LIBS += -l$(PHASE)-$(VERSION) 
@@ -91,7 +95,7 @@ CC=gcc
 LD=gcc
 AR=ar    
 CFLAGS += $(INCLUDES) $(DEFINES)
-LDFLAGS = -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
+LDFLAGS += -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
 COBJS = ${SRCS:.c=.o}
 DEPS = ${COBJS:.o=.d}
 TSRCS = {$TESTS:=.c}
@@ -99,7 +103,6 @@ TOBJS = ${TESTS:=.o}
 TDEPS = ${TOBJS:.o=.d}
 TOUTS = ${TESTS:=.out}
 TVS = ${TESTS:=.v}
-STUBS = ./p3/p3stubs.o
 
 # The following is to deal with circular dependencies between the USLOSS and phase1
 # libraries. Unfortunately the linkers handle this differently on the two OSes.
@@ -140,7 +143,7 @@ $(TESTS):   %: $(TARGET) %.o $(STUBS)
 	$(LD) $(LDFLAGS) -o $@ $@.o $(STUBS) $(LIBFLAGS)
 
 clean:
-	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) *.out tests/*.out tests/*.err p3/*.o
+	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) $(STUBS) *.out tests/*.out tests/*.err
 
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<
