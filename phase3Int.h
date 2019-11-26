@@ -37,10 +37,13 @@ USLOSS_PTE *P3PageTableAllocateEmpty(int numPages) CHECKRETURN;
 
 // Phase 3c
 
-int         P3FrameInit(int frames) CHECKRETURN;
+int         P3FrameInit(int pages, int frames) CHECKRETURN;
 int         P3FrameShutdown(void) CHECKRETURN;
 int         P3FrameFreeAll(PID pid) CHECKRETURN;
-int         P3PagerInit(int pagers) CHECKRETURN;
+int         P3FrameMap(int frame, void **addr) CHECKRETURN;
+int         P3FrameUnmap(int frame) CHECKRETURN;
+
+int         P3PagerInit(int pages, int frames, int pagers) CHECKRETURN;
 int         P3PagerShutdown(void)  CHECKRETURN;
 
 // Phase 3d
@@ -48,7 +51,7 @@ int         P3PagerShutdown(void)  CHECKRETURN;
 int         P3SwapInit(int pages, int frames) CHECKRETURN;
 int         P3SwapShutdown(void) CHECKRETURN;
 int         P3SwapFreeAll(PID pid) CHECKRETURN;
-int         P3SwapClock(PID pid, int *frame) CHECKRETURN;
+int         P3SwapOut(int *frame) CHECKRETURN;
 int         P3SwapIn(PID pid, int page, int frame) CHECKRETURN;
 
 #endif
