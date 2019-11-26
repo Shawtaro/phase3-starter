@@ -19,6 +19,11 @@
 #define P3_PAGER_PRIORITY   2
 
 /*
+ * Swap disk.
+ */
+#define P3_SWAP_DISK 1
+
+/*
  * Paging statistics
  */
 typedef struct P3_VmStats {
@@ -44,6 +49,13 @@ extern P3_VmStats P3_vmStats;
 #define P3_INVALID_NUM_FRAMES       -31
 #define P3_INVALID_NUM_PAGERS       -32
 #define P3_ALREADY_INITIALIZED      -33
+#define P3_HAS_TABLE                -34
+#define P3_FRAME_NOT_MAPPED         -35
+#define P3_EMPTY_PAGE               -36
+#define P3_OUT_OF_SWAP              -37
+#define P3_NOT_INITIALIZED          -38
+#define P3_OUT_OF_PAGES             -39
+#define P3_INVALID_FRAME            -40
 
 #ifndef CHECKRETURN
 #define CHECKRETURN __attribute__((warn_unused_result))
