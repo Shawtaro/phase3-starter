@@ -112,6 +112,10 @@ P3FrameInit(int pages, int frames)
 int
 P3FrameShutdown(void)
 {
+    // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(frameInitialized==FALSE){
         return P3_NOT_INITIALIZED;
@@ -139,6 +143,10 @@ P3FrameShutdown(void)
 int
 P3FrameFreeAll(int pid)
 {
+        // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(frameInitialized==FALSE){
         return P3_NOT_INITIALIZED;
@@ -173,6 +181,10 @@ P3FrameFreeAll(int pid)
 int
 P3FrameMap(int frame, void **addr) 
 {
+        // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(frameInitialized==FALSE){
         return P3_NOT_INITIALIZED;
@@ -225,6 +237,10 @@ P3FrameMap(int frame, void **addr)
 int
 P3FrameUnmap(int frame) 
 {
+        // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(frameInitialized==FALSE){
         return P3_NOT_INITIALIZED;
@@ -307,6 +323,10 @@ FaultHandler(int type, void *arg)
 int
 P3PagerInit(int pages, int frames, int pagers)
 {
+        // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int     result = P1_SUCCESS;
 
     USLOSS_IntVec[USLOSS_MMU_INT] = FaultHandler;
@@ -349,6 +369,10 @@ P3PagerInit(int pages, int frames, int pagers)
 int
 P3PagerShutdown(void)
 {
+        // check kernel mode
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(pagerInitialized==FALSE){
         return P3_NOT_INITIALIZED;
