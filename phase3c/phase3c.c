@@ -79,6 +79,9 @@ static int pagerShutdown=FALSE;
 int
 P3FrameInit(int pages, int frames)
 {
+    if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
+        USLOSS_IllegalInstruction();
+    }
     int result = P1_SUCCESS;
     if(frameInitialized==TRUE){
         return P3_ALREADY_INITIALIZED;
@@ -112,7 +115,6 @@ P3FrameInit(int pages, int frames)
 int
 P3FrameShutdown(void)
 {
-    // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -143,7 +145,6 @@ P3FrameShutdown(void)
 int
 P3FrameFreeAll(int pid)
 {
-        // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -158,8 +159,7 @@ P3FrameFreeAll(int pid)
         for(int i=0;i<numPages;i++){
             framesTable[table[i].frame].used=FALSE;
         }
-    } else
-        return P1_INVALID_PIDl
+    }
     return result;
 }
 
@@ -181,7 +181,6 @@ P3FrameFreeAll(int pid)
 int
 P3FrameMap(int frame, void **addr) 
 {
-        // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -193,11 +192,12 @@ P3FrameMap(int frame, void **addr)
     // find an unused page
     // update the page's PTE to map the page to the frame
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
+    
     int pid = faultQueue[qFront].pid;
-    int page;
-    printf("page: %d\n", faultQueue[qFront].offset);
     USLOSS_PTE  *table = NULL;
     result = P3PageTableGet(pid,&table);
+    
+    int page;
     for(page=0;page<numPages;page++){
         if((table+page)->incore==0){
             break;
@@ -209,14 +209,15 @@ P3FrameMap(int frame, void **addr)
     if(frame<0||frame>=numFrames){
         return P3_INVALID_FRAME;
     }
+    int size;
+    void *vmRegion = USLOSS_MmuRegion(&size);
+    *addr = (void*) (vmRegion+page*USLOSS_MmuPageSize());
     (table+page)->incore=1;
-    (table+page)->read=1;
     (table+page)->write=1;
+    (table+page)->read=1;
     (table+page)->frame=frame;
-    framesTable[frame].used = TRUE;
-    printf("map pid:%d page:%d frame:%d\n", pid,page,frame);
+    //printf("map pid:%d page:%d frame:%d\n", pid,page,frame);
     result = USLOSS_MmuSetPageTable(table);
-    *addr = (void*) (table+page);
     return result;
 }
 /*
@@ -237,7 +238,6 @@ P3FrameMap(int frame, void **addr)
 int
 P3FrameUnmap(int frame) 
 {
-        // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -249,17 +249,23 @@ P3FrameUnmap(int frame)
     // verify that the process mapped the frame
     // update page's PTE to remove the mapping
     // update the page table in the MMU (USLOSS_MmuSetPageTable)
+    
     int pid = faultQueue[qFront].pid;
-    int page = faultQueue[qFront].offset/USLOSS_MmuPageSize();
     USLOSS_PTE  *table = NULL;
     result = P3PageTableGet(pid,&table);
+    int page;
+    for(page=0;page<numPages;page++){
+        if((table+page)->frame==frame){
+            break;
+        }
+    }
     if(page<0||page>=numPages){
         return P3_FRAME_NOT_MAPPED;
     }
     if(frame<0||frame>=numFrames){
         return P3_INVALID_FRAME;
     }
-    printf("unmap pid:%d page:%d frame:%d\n", pid,page,frame);
+    //printf("unmap pid:%d page:%d frame:%d\n", pid,page,frame);
     result = USLOSS_MmuSetPageTable(table);
     return result;
 }
@@ -284,7 +290,7 @@ FaultHandler(int type, void *arg)
     // fill in other fields in fault
     fault.pid=P1_GetPid();
     fault.rc=0;
-    printf("fault %d\n", fault.pid);
+    //printf("fault %d\n", fault.pid);
     fault.cause=USLOSS_MmuGetCause();
     char name[P1_MAXNAME+1];
     snprintf(name, sizeof(name), "Fault %d", fault.pid);
@@ -323,7 +329,6 @@ FaultHandler(int type, void *arg)
 int
 P3PagerInit(int pages, int frames, int pagers)
 {
-        // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -369,7 +374,6 @@ P3PagerInit(int pages, int frames, int pagers)
 int
 P3PagerShutdown(void)
 {
-        // check kernel mode
     if ((USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE) == 0){
         USLOSS_IllegalInstruction();
     }
@@ -439,8 +443,8 @@ Pager(void *arg)
             result = P1_V(pagerMutex);
             continue;
         }
-        int frame = 0;
-        for(;frame<numFrames;frame++){
+        int frame;
+        for(frame=0;frame<numFrames;frame++){
             if(framesTable[frame].used==FALSE){
                 break;
             }
@@ -451,16 +455,19 @@ Pager(void *arg)
         int page = fault.offset/USLOSS_MmuPageSize();
         result = P3SwapIn(fault.pid, page, frame);
         if (result == P3_EMPTY_PAGE){
-            
+            void *addr;
+            result = P3FrameMap(frame, &addr);
+            memset(addr, 0, USLOSS_MmuPageSize());
+            result = P3FrameUnmap(frame);
         }else if (result == P3_OUT_OF_SWAP){
             faultQueue[qFront].rc = P3_OUT_OF_SWAP;
             result = P1_V(fault.wait);
             result = P1_V(pagerMutex);
             continue;
         }
-        USLOSS_PTE *table = NULL;
-        result = P3PageTableGet(fault.pid,&table);
-        
+        // USLOSS_PTE *table = NULL;
+        // result = P3PageTableGet(fault.pid,&table);
+        framesTable[frame].used=TRUE;
         result = P1_V(fault.wait);
         result = P1_V(pagerMutex);
     }
