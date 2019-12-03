@@ -150,7 +150,8 @@ P3FrameFreeAll(int pid)
         for(int i=0;i<numPages;i++){
             framesTable[table[i].frame].used=FALSE;
         }
-    }
+    } else
+        return P1_INVALID_PIDl
     return result;
 }
 
