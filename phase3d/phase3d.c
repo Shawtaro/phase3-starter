@@ -46,7 +46,9 @@ static int debugging3 = 0;
 #endif
 
 static int clockHand = 0; 	//the position of the clock hand;
-static int clockAlg(int, int) ;
+static int clockAlg(int pid) ;
+int semClockHand;	//protect clock
+static int swapInitialized = FALSE;
 
 static void debug3(char *fmt, ...)
 {
@@ -74,11 +76,11 @@ static void debug3(char *fmt, ...)
 int
 P3SwapInit(int pages, int frames)
 {
-    int result = P1_SUCCESS;
+	int result = P1_SUCCESS;
 
     // initialize the swap data structures, e.g. the pool of free blocks
-
-    return result;
+	result = P1_SemCreate("clockHand",1,&semClockHand);
+	return result;
 }
 /*
  *----------------------------------------------------------------------
@@ -152,36 +154,33 @@ P3SwapFreeAll(int pid)
 int
 P3SwapOut(int *frame) 
 {
-    int result = P1_SUCCESS;
+	if(swapInitialized==FALSE){
+        	return P3_NOT_INITIALIZED;
+    	}
+	int freeFrame = -1;		//shouldn't return -1
+	int access;
+ 	USLOSS_PTE *table;
+ 	P3PageTableGet(pid,&table);
+	// clock alg
+	P1_P(semClockHand);
+ 	while(freeFrame == -1) {
+		result = USLOSS_MmuGetAccess(clockPos, &access);
+		if ((access & USLOSS_MMU_REF) == 0) 
+			freeFrame = clockHand;
+		else 
+			USLOSS_MmuSetAccess(clockHand, access & 0x2);
+        clockHand = (clockHand+1)%P3_vmStats.frames;
+	}
+	
+	            if(access >= 2){//    if frame[target] is dirty (USLOSS_MmuGetAccess)
 
-    /*****************
-
-    NOTE: in the pseudo-code below I used the notation frames[x] to indicate frame x. You 
-    may or may not have an actual array with this name. As with all my pseudo-code feel free
-    to ignore it.
-
-
-    static int hand = -1;    // start with frame 0
-    P(mutex)
-    loop
-        hand = (hand + 1) % # of frames
-        if frames[hand] is not busy
-            if frames[hand] hasn't been referenced (USLOSS_MmuGetAccess)
-                target = hand
-                break
-            else
-                clear reference bit (USLOSS_MmuSetAccess)
-    if frame[target] is dirty (USLOSS_MmuGetAccess)
-        write page to its location on the swap disk (P3FrameMap,P2_DiskWrite,P3FrameUnmap)
-        clear dirty bit (USLOSS_MmuSetAccess)
-    update page table of process to indicate page is no longer in a frame
-    mark frames[target] as busy
-    V(mutex)
-    *frame = target
-
-    *****************/
-
-    return result;
+	      //  write page to its location on the swap disk (P3FrameMap,P2_DiskWrite,P3FrameUnmap)
+      		//  clear dirty bit (USLOSS_MmuSetAccess)
+   		// update page table of process to indicate page is no longer in a frame
+   		// mark frames[target] as busy
+		    }
+	P1_V(semClockHand);
+	return P1_SUCCESS;
 }
 /*
  *----------------------------------------------------------------------
@@ -223,21 +222,3 @@ P3SwapIn(int pid, int page, int frame)
 
     return result;
 }
-
-int clockAlg(int pid) {
-	int result = P1_SUCCESS;
-	int freeFrame = -1;		//shouldn't return -1
-	int access;
- 	USLOSS_PTE *table;
- 	int rc = P3PageTableGet(pid,&table);
- 	while(freeFrame == -1) {
-		result = USLOSS_MmuGetAccess(clockPos, &access);
-		if ((access & USLOSS_MMU_REF) == 0) 
-			freeFrame = clockHand;
-		else 
-			USLOSS_MmuSetAccess(clockHand, access & 0x2);
-        clockHand = (clockHand+1)%P3_vmStats.frames;
-	}
-	return freeFrame;
-}
-
