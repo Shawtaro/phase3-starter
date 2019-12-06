@@ -79,7 +79,7 @@ P3SwapInit(int pages, int frames)
 	int result = P1_SUCCESS;
 
     // initialize the swap data structures, e.g. the pool of free blocks
-	result = P1_SemCreate("clockHand",1,&semClockHand);
+	P1_SemCreate("clockHand",1,&semClockHand);
 	return result;
 }
 /*
@@ -98,10 +98,13 @@ P3SwapInit(int pages, int frames)
 int
 P3SwapShutdown(void)
 {
+	if(swapInitialized==FALSE){
+        	return P3_NOT_INITIALIZED;
+    	}
     int result = P1_SUCCESS;
 
     // clean things up
-
+	P1_SemFree(semClockHand);
     return result;
 }
 
@@ -122,6 +125,9 @@ P3SwapShutdown(void)
 int
 P3SwapFreeAll(int pid)
 {
+	if(swapInitialized==FALSE){
+        	return P3_NOT_INITIALIZED;
+    	}
     int result = P1_SUCCESS;
 
     /*****************
@@ -159,7 +165,9 @@ P3SwapOut(int *frame)
     	}
 	int freeFrame = -1;		//shouldn't return -1
 	int access;
+	int pagePtr;
  	USLOSS_PTE *table;
+ 	char buffer[USLOSS_MmuPageSize()];
  	P3PageTableGet(pid,&table);
 	// clock alg
 	P1_P(semClockHand);
@@ -171,10 +179,12 @@ P3SwapOut(int *frame)
 			USLOSS_MmuSetAccess(clockHand, access & 0x2);
         clockHand = (clockHand+1)%P3_vmStats.frames;
 	}
-	
-	            if(access >= 2){//    if frame[target] is dirty (USLOSS_MmuGetAccess)
-
+	int vmRegion=USLOSS_MmuRegion(&pagePtr);
+	            if(access == USLOSS_MMU_DIRTY){//    if frame[target] is dirty (USLOSS_MmuGetAccess)
+			memcpy(&buffer, vmRegion+freeFrame*USLOSS_MmuPageSize() , USLOSS_MmuPageSize());
+			P2_DiskWrite
 	      //  write page to its location on the swap disk (P3FrameMap,P2_DiskWrite,P3FrameUnmap)
+			    //P3_SWAP_DISK
       		//  clear dirty bit (USLOSS_MmuSetAccess)
    		// update page table of process to indicate page is no longer in a frame
    		// mark frames[target] as busy
@@ -202,6 +212,9 @@ P3SwapOut(int *frame)
 int
 P3SwapIn(int pid, int page, int frame)
 {
+	if(swapInitialized==FALSE){
+        	return P3_NOT_INITIALIZED;
+    	}
     int result = P1_SUCCESS;
 
     /*****************
