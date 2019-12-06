@@ -225,19 +225,19 @@ P3SwapIn(int pid, int page, int frame)
 }
 
 int clockAlg(int pid) {
-    int result = P1_SUCCESS;
-	int 	freeFrame = -1;		//shouldn't return -1
-	int 	access;
-    USLOSS_PTE *table;
-    int rc = P3PageTableGet(pid,&table);
-    while(freeFrame == -1) {
+	int result = P1_SUCCESS;
+	int freeFrame = -1;		//shouldn't return -1
+	int access;
+ 	USLOSS_PTE *table;
+ 	int rc = P3PageTableGet(pid,&table);
+ 	while(freeFrame == -1) {
 		result = USLOSS_MmuGetAccess(clockPos, &access);
 		if ((access & USLOSS_MMU_REF) == 0) 
 			freeFrame = clockHand;
 		else 
 			USLOSS_MmuSetAccess(clockHand, access & 0x2);
         clockHand = (clockHand+1)%P3_vmStats.frames;
-	
+	}
 	return freeFrame;
 }
 
