@@ -59,12 +59,17 @@ static void debug3(char *fmt, ...)
 static int initialized=FALSE;
 static int numFrames;
 static int numPages;
-static int * framesTable;
 static int mutex;
+typedef struct Frame
+{
+    int pid;
+    int page;
+    int used;
+}Frame;
+static Frame *frameTable;
 
 typedef struct Data{
     int pid;
-    int frame;
     int first;
     int track;
     int page;
@@ -76,7 +81,7 @@ static int tracks;
 static int sectors;
 static int start;
 static Data *swapData;
-void *addr = NULL;
+
 /*
  *----------------------------------------------------------------------
  *
@@ -102,18 +107,19 @@ P3SwapInit(int pages, int frames)
     result = P1_SemCreate("Mutex",1,&mutex);
     numFrames = frames;
     numPages = pages;
-    framesTable=malloc(sizeof(int)*numFrames);
+    frameTable=malloc(sizeof(Frame)*numFrames);
     for(int i=0;i<numFrames;i++){
-        framesTable[i]=FALSE;
+        frameTable[i].pid=-1;
+        frameTable[i].page=-1;
+        frameTable[i].used=FALSE;
     }
     result = P2_DiskSize(P3_SWAP_DISK,&sectorSize,&trackSize,&tracks);
     sectors = tracks*trackSize;
     swapData = malloc(sizeof(Data)*sectors);
     for(int i=0;i<sectors;i++){
         swapData[i].pid=-1;
-        swapData[i].frame=-1;
-        swapData[i].first=i%tracks;
-        swapData[i].track=i/tracks;
+        swapData[i].first=i/tracks;
+        swapData[i].track=i%tracks;
         swapData[i].page= -1;
     }
     initialized=TRUE;
@@ -143,6 +149,7 @@ P3SwapShutdown(void)
 
     // clean things up
     free(swapData);
+    free(frameTable);
     result = P1_SemFree(mutex);
     initialized = FALSE;
     return result;
@@ -178,10 +185,8 @@ P3SwapFreeAll(int pid)
     //free all swap space used by the process
     for(int i=0;i<sectors;i++){
         if(swapData[i].pid==pid){
-            framesTable[swapData[i].frame]=FALSE;
             result = P2_DiskWrite(P3_SWAP_DISK,swapData[i].track,swapData[i].first,1,NULL);
-            swapData[i].pid=-1;
-            swapData[i].frame=-1;
+            swapData[i].pid= -1;
             swapData[i].page= -1;
         }
     }
@@ -244,7 +249,7 @@ P3SwapOut(int *frame)
     int accessPtr;
     while(1){
         hand = (hand+1)%numFrames;
-        if(framesTable[hand]==FALSE){
+        if(frameTable[hand].used==FALSE){
             result = USLOSS_MmuGetAccess(hand,&accessPtr);
             if((accessPtr&1)!=USLOSS_MMU_REF){
                 target = hand;
@@ -256,19 +261,19 @@ P3SwapOut(int *frame)
     }
     int index;
     for(index=0;index<sectors;index++){
-        if(swapData[index].frame==target){
+        if(swapData[index].pid==frameTable[target].pid&&swapData[index].page==frameTable[target].page){
             break;
         }
     }
+    printf("swapOut pid:%d page:%d frame:%d\n", frameTable[target].pid,frameTable[target].page,target);
     if((accessPtr&2)==USLOSS_MMU_DIRTY){    
-        //void *addr;     
+        void *addr; 
+        char buffer[USLOSS_MmuPageSize()];    
         result = P3FrameMap(target,&addr);
-        
         // write page to its location on the swap disk
-        void *buffer=malloc(USLOSS_MmuPageSize());
-        memcpy(buffer,addr,USLOSS_MmuPageSize());
-        result = P2_DiskWrite(P3_SWAP_DISK,swapData[index].track,swapData[index].first,USLOSS_MmuPageSize()/sectorSize,buffer);
-        free(buffer);
+        memcpy(&buffer,addr,USLOSS_MmuPageSize());
+        printf("write to disk\n");
+        result = P2_DiskWrite(P3_SWAP_DISK,swapData[index].track,swapData[index].first,USLOSS_MmuPageSize()/sectorSize,&buffer);
 
         result = P3FrameUnmap(target);
         result = USLOSS_MmuSetAccess(target,accessPtr&1);
@@ -276,12 +281,11 @@ P3SwapOut(int *frame)
     
     // update page table of process to indicate page is no longer in a frame
     USLOSS_PTE  *table = NULL;
-    result = P3PageTableGet(swapData[index].pid,&table);
-    (table+swapData[index].page)->incore=0;
-    (table+swapData[index].page)->frame=-1;
-
+    result = P3PageTableGet(frameTable[target].pid,&table);
+    (table+frameTable[target].page)->incore=0;
+    (table+frameTable[target].page)->frame=-1;
     result = USLOSS_MmuSetPageTable(table); 
-    framesTable[hand]=TRUE;
+    frameTable[target].used=TRUE;
     result = P1_V(mutex);
     *frame=target;
     return result;
@@ -335,7 +339,8 @@ P3SwapIn(int pid, int page, int frame)
 
     *****************/
     int result = P1_SUCCESS;
-    result = P1_P(mutex);
+    int rc;
+    rc = P1_P(mutex);
     int onDisk = FALSE;
     int index;
     for(index=0;index<sectors;index++){
@@ -344,40 +349,39 @@ P3SwapIn(int pid, int page, int frame)
             break;
         }
     }
+    printf("swapIn pid: %d page:%d frame:%d \n", pid,page,frame);
     if(onDisk==TRUE){
-        result = P3FrameMap(frame,&addr);
-        void *buffer=malloc(USLOSS_MmuPageSize());
-        result = P2_DiskRead(P3_SWAP_DISK,swapData[index].track,swapData[index].first,USLOSS_MmuPageSize()/sectorSize, buffer);
-        memcpy(addr,buffer,USLOSS_MmuPageSize());
-        free(buffer);
-        result = P3FrameUnmap(frame);
+        printf("read from disk\n");
+        void *addr;
+        char buffer[USLOSS_MmuPageSize()]; 
+        rc = P3FrameMap(frame,&addr);
+        rc = P2_DiskRead(P3_SWAP_DISK,swapData[index].track,swapData[index].first,USLOSS_MmuPageSize()/sectorSize, &buffer);
+        memcpy(addr,&buffer,USLOSS_MmuPageSize());
+        rc = P3FrameUnmap(frame);
     }else{
         for(index=0;index<sectors;index++){
             if(swapData[index].pid==-1){
                 swapData[index].pid = pid;
-                swapData[index].frame = frame;
                 swapData[index].page = page;
                 break;
             }
         }
         if(index == sectors){
-            framesTable[frame]=FALSE;
-            result = P1_V(mutex);
-            return P3_OUT_OF_SWAP;
+            result =  P3_OUT_OF_SWAP;
         }else{
-            framesTable[frame]=FALSE;
-            result = P1_V(mutex);
-            return P3_EMPTY_PAGE;
+            result = P3_EMPTY_PAGE;
         }
     }
     USLOSS_PTE  *table = NULL;
-    result = P3PageTableGet(swapData[index].pid,&table);
+    rc = P3PageTableGet(pid,&table);
     (table+page)->incore=1;
     (table+page)->write=1;
     (table+page)->read=1;
     (table+page)->frame=frame;
-    result = USLOSS_MmuSetPageTable(table);
-    framesTable[frame]=FALSE;
-    result = P1_V(mutex);
+    rc = USLOSS_MmuSetPageTable(table);
+    frameTable[frame].pid = pid;
+    frameTable[frame].page = page;
+    frameTable[frame].used= FALSE;
+    rc = P1_V(mutex);
     return result;
 }
